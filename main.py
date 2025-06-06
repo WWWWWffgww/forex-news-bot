@@ -6,13 +6,13 @@ from bs4 import BeautifulSoup
 import asyncio
 from datetime import datetime, timedelta
 
-# 🔐 Токен твоего Telegram-бота
+A# 🔐 Токен твоего Telegram-бота
 API_TOKEN = '7910558919:AAFlI7JWP3s-MTPV6ILpzQzgnRZSBPnSyGo'
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-user_filters = {}  # user_id: {'high', 'medium'} или {'ALL'}
+user_filters = {}
 
 def get_main_menu():
     kb = InlineKeyboardMarkup(row_width=1)
@@ -40,7 +40,7 @@ async def start_cmd(message: types.Message):
     user_filters[message.from_user.id] = {'high'}
     await message.answer("Привет! Выбери действие 👇", reply_markup=get_main_menu())
 
-@dp.callback_query_handler(lambda c: c.data.startswith('news_') or c.data.startswith('filter_') or c.data == 'back' or c.data == 'set_filter')
+@dp.callback_query_handler(lambda c: c.data.startswith('news_') or c.data.startswith('filter_') or c.data in ['back', 'set_filter'])
 async def callback_handler(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     if user_id not in user_filters:
@@ -63,7 +63,7 @@ async def callback_handler(callback_query: types.CallbackQuery):
 
     elif callback_query.data == 'filter_all':
         user_filters[user_id] = {'ALL'}
-        await bot.send_message(callback_query.from_user.id, "Фильтрация отключена. Теперь будут отображаться все новости.")
+        await bot.send_message(callback_query.from_user.id, "✅ Фильтрация отключена. Все новости будут отображаться.")
 
     elif callback_query.data.startswith('filter_'):
         level = callback_query.data.replace('filter_', '')
@@ -74,8 +74,8 @@ async def callback_handler(callback_query: types.CallbackQuery):
                 user_filters[user_id].remove(level)
             else:
                 user_filters[user_id].add(level)
-        current = ', '.join(user_filters[user_id]) or 'ничего не выбрано'
-        await bot.send_message(callback_query.from_user.id, f"Текущие фильтры: {current}")
+        selected = ', '.join(user_filters[user_id]) or 'ничего не выбрано'
+        await bot.send_message(callback_query.from_user.id, f"Текущие фильтры: {selected}")
 
     elif callback_query.data == 'back':
         await bot.send_message(callback_query.from_user.id, "Главное меню 👇", reply_markup=get_main_menu())
@@ -121,14 +121,19 @@ async def fetch_forex_news(day_offset=0, last_minutes=None):
             continue
 
         time_str = time_cell.text.strip()
-        if time_str.lower() in ['all day', 'tentative', '']:
-            continue
+        time_obj = None
 
-        try:
-            time_obj = datetime.strptime(time_str, '%I:%M%p')
-            time_obj = time_obj.replace(year=now.year, month=now.month, day=now.day)
-        except:
-            continue
+        if time_str.lower() in ['all day', 'tentative', '']:
+            # Мы все равно добавим эти события
+            time_display = '📌 All Day' if time_str.lower() == 'all day' else '🕓 Время не указано'
+            time_obj = now.replace(hour=0, minute=0, second=0)  # фиктивное время
+        else:
+            try:
+                time_obj = datetime.strptime(time_str, '%I:%M%p')
+                time_obj = time_obj.replace(year=now.year, month=now.month, day=now.day)
+                time_display = time_str
+            except:
+                continue
 
         if time_obj.date() != target_day:
             continue
@@ -148,12 +153,12 @@ async def fetch_forex_news(day_offset=0, last_minutes=None):
                 continue
 
         emoji = '🟥' if impact == 'high' else '🟨' if impact == 'medium' else '🟩'
-        text = f"{emoji} {event_cell.text.strip()} — {time_str} ({currency_cell.text.strip()})"
+        text = f"{emoji} {event_cell.text.strip()} — {time_display} ({currency_cell.text.strip()})"
         news_items.append({'impact': impact, 'text': text})
 
     return news_items
 
-# 📢 Автоматическая рассылка важных новостей в канал
+# 🔁 Авторассылка в канал каждые 5 минут
 async def auto_broadcast():
     already_sent = set()
     while True:
@@ -162,10 +167,10 @@ async def auto_broadcast():
             if item['impact'] == 'high' and item['text'] not in already_sent:
                 await bot.send_message(CHANNEL_ID, f"🔥 Важная новость:\n{item['text']}")
                 already_sent.add(item['text'])
-        await asyncio.sleep(300)  # каждые 5 минут
+        await asyncio.sleep(300)
 
 if __name__ == '__main__':
-    print("✅ Бот запущен и работает с авторассылкой")
+    print("✅ Бот запущен. Авторассылка и фильтры активны.")
     loop = asyncio.get_event_loop()
     loop.create_task(auto_broadcast())
     executor.start_polling(dp, skip_updates=True)
