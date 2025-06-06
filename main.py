@@ -4,21 +4,18 @@ from aiogram.utils import executor
 import requests
 from bs4 import BeautifulSoup
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # 🔐 Токен твоего Telegram-бота
 API_TOKEN = '7910558919:AAFlI7JWP3s-MTPV6ILpzQzgnRZSBPnSyGo'
 
-# 📡 Канал, куда бот будет отправлять новости
-CHANNEL_ID = '@forex_news_100k'
-
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# Храним фильтр для каждого пользователя
+# Сохраняем выбранные фильтры по пользователю
 user_filters = {}
 
-# inline кнопки
+# Главное меню
 def get_main_menu():
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
@@ -28,6 +25,7 @@ def get_main_menu():
     )
     return kb
 
+# Меню фильтра по цвету
 def get_filter_menu():
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
@@ -41,7 +39,7 @@ def get_filter_menu():
 @dp.message_handler(commands=['start'])
 async def start_cmd(message: types.Message):
     user_filters[message.from_user.id] = {'high'}
-    await message.answer("Выбери действие:", reply_markup=get_main_menu())
+    await message.answer("Привет! Выбери действие 👇", reply_markup=get_main_menu())
 
 @dp.callback_query_handler(lambda c: c.data in ['news_today', 'news_important', 'set_filter', 'filter_high', 'filter_medium', 'filter_low', 'back'])
 async def callback_handler(callback_query: types.CallbackQuery):
@@ -51,42 +49,41 @@ async def callback_handler(callback_query: types.CallbackQuery):
 
     if callback_query.data == 'news_today':
         news = await fetch_forex_news(include_all_today=True)
-        filtered = filter_by_user(news, user_id)
-        if filtered:
-            for item in filtered:
-                await bot.send_message(callback_query.from_user.id, item)
+        if news:
+            for item in news:
+                await bot.send_message(callback_query.from_user.id, item['text'])
         else:
-            await bot.send_message(callback_query.from_user.id, "Сегодня нет новостей по выбранному фильтру.")
+            await bot.send_message(callback_query.from_user.id, "Сегодня пока нет новостей.")
     elif callback_query.data == 'news_important':
         news = await fetch_forex_news(last_minutes=10)
         filtered = filter_by_user(news, user_id)
         if filtered:
             for item in filtered:
-                await bot.send_message(callback_query.from_user.id, item)
+                await bot.send_message(callback_query.from_user.id, item['text'])
         else:
             await bot.send_message(callback_query.from_user.id, "Нет важных новостей за последние 10 минут.")
     elif callback_query.data == 'set_filter':
         await bot.send_message(callback_query.from_user.id, "Выбери уровень важности:", reply_markup=get_filter_menu())
     elif callback_query.data.startswith('filter_'):
         level = callback_query.data.replace('filter_', '')
-        level_map = {'high': 'high', 'medium': 'medium', 'low': 'low'}
-        if level in level_map:
-            if level_map[level] in user_filters[user_id]:
-                user_filters[user_id].remove(level_map[level])
+        if level in {'high', 'medium', 'low'}:
+            if level in user_filters[user_id]:
+                user_filters[user_id].remove(level)
             else:
-                user_filters[user_id].add(level_map[level])
-        await bot.send_message(callback_query.from_user.id, f"Выбранные фильтры: {', '.join(user_filters[user_id])}")
+                user_filters[user_id].add(level)
+        selected = ', '.join(user_filters[user_id]) or 'ничего не выбрано'
+        await bot.send_message(callback_query.from_user.id, f"Выбрано: {selected}")
     elif callback_query.data == 'back':
-        await bot.send_message(callback_query.from_user.id, "Меню:", reply_markup=get_main_menu())
+        await bot.send_message(callback_query.from_user.id, "Главное меню 👇", reply_markup=get_main_menu())
 
     await bot.answer_callback_query(callback_query.id)
 
-# фильтрация новостей
+# Фильтрация новостей по фильтрам пользователя
 def filter_by_user(news_list, user_id):
-    impact_filter = user_filters.get(user_id, {'high'})
-    return [n['text'] for n in news_list if n['impact'] in impact_filter]
+    filters = user_filters.get(user_id, {'high'})
+    return [n for n in news_list if n['impact'] in filters]
 
-# парсинг
+# Парсер новостей с сайта
 async def fetch_forex_news(include_all_today=False, last_minutes=None):
     url = 'https://www.forexfactory.com/calendar'
     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -108,7 +105,7 @@ async def fetch_forex_news(include_all_today=False, last_minutes=None):
         country_cell = row.find('td', class_='calendar__country')
         currency_cell = row.find('td', class_='calendar__currency')
 
-        if not all([time_cell, event_cell, impact_cell]):
+        if not all([time_cell, event_cell, impact_cell, country_cell, currency_cell]):
             continue
 
         time_str = time_cell.text.strip()
@@ -129,7 +126,7 @@ async def fetch_forex_news(include_all_today=False, last_minutes=None):
         elif 'low' in impact_class:
             impact = 'low'
         else:
-            continue
+            impact = 'unknown'
 
         if last_minutes:
             if abs((now - time_obj).total_seconds()) > last_minutes * 60:
@@ -142,6 +139,7 @@ async def fetch_forex_news(include_all_today=False, last_minutes=None):
 
     return news_items
 
-# запуск
+# Старт бота
 if __name__ == '__main__':
+    print("✅ Бот запущен и готов к работе.")
     executor.start_polling(dp, skip_updates=True)
