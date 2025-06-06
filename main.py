@@ -4,17 +4,17 @@ import requests
 from bs4 import BeautifulSoup
 import asyncio
 
-# 🔐 Токен твоего бота
+# 🔐 Токен твоего Telegram-бота
 API_TOKEN = '7910558919:AAFlI7JWP3s-MTPV6ILpzQzgnRZSBPnSyGo'
 
-# 🔔 Канал, куда бот будет отправлять новости
-CHANNEL_ID = '@forex_news_100k'  # Замени, если канал называется иначе
+# 📡 Канал, куда бот будет отправлять новости
+CHANNEL_ID = '@forex_news_100k'
 
-# 🧠 Инициализация бота
+# 🤖 Инициализация бота
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# 📥 Функция парсинга важных новостей с ForexFactory
+# 📥 Получение важных новостей с ForexFactory
 async def fetch_forex_news():
     url = 'https://www.forexfactory.com/calendar'
     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -40,21 +40,32 @@ async def fetch_forex_news():
 
     return important_news
 
-# 🔄 Цикл проверки каждые 5 минут
+# 🔁 Фоновая проверка новостей каждые 5 минут
 async def scheduled_news_check():
     while True:
         news = await fetch_forex_news()
         if news:
             for n in news:
                 await bot.send_message(CHANNEL_ID, n)
-        await asyncio.sleep(300)
+        await asyncio.sleep(300)  # 5 минут
 
-# 📬 Команда /start
+# 🟢 Команда /start — приветствие
 @dp.message_handler(commands=['start'])
 async def start_cmd(message: types.Message):
     await message.answer("Привет! Я слежу за важными новостями на рынке Forex 📊")
 
-# 🚀 Запуск
+# 🧪 Команда /force — ручная проверка новостей
+@dp.message_handler(commands=['force'])
+async def force_news(message: types.Message):
+    news = await fetch_forex_news()
+    if news:
+        for n in news:
+            await bot.send_message(CHANNEL_ID, n)
+        await message.answer("📨 Новости отправлены вручную.")
+    else:
+        await message.answer("❌ Важных новостей не найдено.")
+
+# 🚀 Запуск бота
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     loop.create_task(scheduled_news_check())
