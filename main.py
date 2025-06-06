@@ -5,6 +5,7 @@ from aiogram.utils import executor
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 
+# 🔐 Токен и канал — как ты просил
 API_TOKEN = '7910558919:AAFlI7JWP3s-MTPV6ILpzQzgnRZSBPnSyGo'
 CHANNEL_ID = '@forex_news_alert_100k_bot'
 
