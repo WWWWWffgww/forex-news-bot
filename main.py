@@ -6,8 +6,11 @@ from bs4 import BeautifulSoup
 import asyncio
 from datetime import datetime, timedelta
 
-🔐 Токен твоего Telegram-бота
+# 🔐 Токен Telegram-бота
 API_TOKEN = '7910558919:AAFlI7JWP3s-MTPV6ILpzQzgnRZSBPnSyGo'
+
+# 📡 Telegram-канал
+CHANNEL_ID = '@forex_news_alert_100k_bot'
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
@@ -124,9 +127,8 @@ async def fetch_forex_news(day_offset=0, last_minutes=None):
         time_obj = None
 
         if time_str.lower() in ['all day', 'tentative', '']:
-            # Мы все равно добавим эти события
             time_display = '📌 All Day' if time_str.lower() == 'all day' else '🕓 Время не указано'
-            time_obj = now.replace(hour=0, minute=0, second=0)  # фиктивное время
+            time_obj = now.replace(hour=0, minute=0, second=0)
         else:
             try:
                 time_obj = datetime.strptime(time_str, '%I:%M%p')
@@ -158,7 +160,7 @@ async def fetch_forex_news(day_offset=0, last_minutes=None):
 
     return news_items
 
-# 🔁 Авторассылка в канал каждые 5 минут
+# 🔁 Авторассылка каждые 5 минут
 async def auto_broadcast():
     already_sent = set()
     while True:
@@ -170,7 +172,7 @@ async def auto_broadcast():
         await asyncio.sleep(300)
 
 if __name__ == '__main__':
-    print("✅ Бот запущен. Авторассылка и фильтры активны.")
+    print("✅ Бот запущен. Авторассылка активна.")
     loop = asyncio.get_event_loop()
     loop.create_task(auto_broadcast())
     executor.start_polling(dp, skip_updates=True)
