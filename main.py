@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import asyncio
 from datetime import datetime, timedelta
 
-A# 🔐 Токен твоего Telegram-бота
+🔐 Токен твоего Telegram-бота
 API_TOKEN = '7910558919:AAFlI7JWP3s-MTPV6ILpzQzgnRZSBPnSyGo'
 
 bot = Bot(token=API_TOKEN)
