@@ -1,14 +1,10 @@
+import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils import executor
-import requests
-from bs4 import BeautifulSoup
-import asyncio
+from playwright.async_api import async_playwright
 
-# 🔐 Токен Telegram-бота
 API_TOKEN = '7910558919:AAFlI7JWP3s-MTPV6ILpzQzgnRZSBPnSyGo'
-
-# 📡 Telegram-канал
 CHANNEL_ID = '@forex_news_alert_100k_bot'
 
 bot = Bot(token=API_TOKEN)
@@ -17,9 +13,6 @@ dp = Dispatcher(bot)
 def get_main_menu():
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
-        InlineKeyboardButton("📅 НОВОСТИ ДНЯ", callback_data='news_today'),
-        InlineKeyboardButton("📆 ЗАВТРА", callback_data='news_tomorrow'),
-        InlineKeyboardButton("🕘 ВАЖНЫЕ", callback_data='news_important'),
         InlineKeyboardButton("🌐 ВСЕ НОВОСТИ С САЙТА", callback_data='news_all_raw')
     )
     return kb
@@ -28,76 +21,54 @@ def get_main_menu():
 async def start_cmd(message: types.Message):
     await message.answer("Привет! Выбери действие 👇", reply_markup=get_main_menu())
 
-@dp.callback_query_handler(lambda c: c.data.startswith('news_'))
-async def callback_handler(callback_query: types.CallbackQuery):
-    action = callback_query.data
+@dp.callback_query_handler(lambda c: c.data == 'news_all_raw')
+async def handle_all_news(callback_query: types.CallbackQuery):
+    await bot.answer_callback_query(callback_query.id, text="Загружаю сайт...")
+    news_list = await fetch_all_forex_news_playwright()
+    if news_list:
+        for news in news_list:
+            await bot.send_message(callback_query.from_user.id, news)
+    else:
+        await bot.send_message(callback_query.from_user.id, "😔 Новости не найдены.")
 
-    if action == 'news_all_raw':
-        news = await fetch_all_forex_news_raw()
-        if news:
-            for item in news:
-                await bot.send_message(callback_query.from_user.id, item)
-        else:
-            await bot.send_message(callback_query.from_user.id, "😔 Новости не найдены.")
-        await bot.answer_callback_query(callback_query.id)
-        return
+async def fetch_all_forex_news_playwright():
+    news_items = []
 
-    await bot.send_message(callback_query.from_user.id, "⛔ Эта кнопка пока не активна.")
-    await bot.answer_callback_query(callback_query.id)
-
-async def fetch_all_forex_news_raw():
-    url = 'https://www.forexfactory.com/calendar'
-    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.goto("https://www.forexfactory.com/calendar", timeout=60000)
+            await page.wait_for_selector("table.calendar__table")
+
+            rows = await page.query_selector_all("tr.calendar__row")
+
+            for row in rows:
+                time = await row.query_selector_eval("td.calendar__time", "e => e.textContent?.trim()") or "—"
+                currency = await row.query_selector_eval("td.calendar__currency", "e => e.textContent?.trim()") or "—"
+                event = await row.query_selector_eval("td.calendar__event", "e => e.textContent?.trim()") or "—"
+
+                impact_el = await row.query_selector("td.calendar__impact")
+                impact_html = await impact_el.inner_html() if impact_el else ""
+
+                if "high" in impact_html:
+                    impact = "🔴 High"
+                elif "medium" in impact_html:
+                    impact = "🟠 Medium"
+                elif "low" in impact_html:
+                    impact = "🟡 Low"
+                else:
+                    impact = "⚪ Unknown"
+
+                message = f"{impact} — {event} ({currency})\n🕒 {time}"
+                news_items.append(message)
+
+            await browser.close()
     except Exception as e:
-        print("❌ Ошибка подключения:", e)
-        return []
+        print(f"❌ Ошибка Playwright: {e}")
 
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # ✅ ВАЖНО: ищем по class_, а не по id
-    table = soup.find('table', class_='calendar__table')
-    if not table:
-        print("❌ Таблица не найдена (class='calendar__table')")
-        return []
-
-    rows = table.find_all('tr', class_='calendar__row')
-    all_news = []
-
-    for row in rows:
-        time_cell = row.find('td', class_='calendar__time')
-        event_cell = row.find('td', class_='calendar__event')
-        impact_cell = row.find('td', class_='calendar__impact')
-        currency_cell = row.find('td', class_='calendar__currency')
-
-        if not all([time_cell, event_cell, impact_cell, currency_cell]):
-            continue
-
-        time_text = time_cell.text.strip()
-        event = event_cell.text.strip()
-        currency = currency_cell.text.strip()
-
-        # Определяем уровень важности
-        impact_span = impact_cell.find('span')
-        if impact_span:
-            classes = impact_span.get('class', [])
-            if 'high' in classes:
-                impact = '🟥 High'
-            elif 'medium' in classes:
-                impact = '🟨 Medium'
-            elif 'low' in classes:
-                impact = '🟩 Low'
-            else:
-                impact = '⚪ Unknown'
-        else:
-            impact = '⚪ Unknown'
-
-        msg = f"{impact} — {event} ({currency})\n🕒 {time_text}"
-        all_news.append(msg)
-
-    print(f"✅ Найдено новостей: {len(all_news)}")
-    return all_news
+    print(f"✅ Получено новостей: {len(news_items)}")
+    return news_items
 
 if __name__ == '__main__':
     print("✅ Бот запущен. Таблица теперь видна и новости читаются.")
