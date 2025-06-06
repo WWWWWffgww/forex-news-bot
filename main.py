@@ -51,13 +51,15 @@ async def fetch_all_forex_news_raw():
     try:
         response = requests.get(url, headers=headers, timeout=10)
     except Exception as e:
-        print("Ошибка подключения:", e)
+        print("❌ Ошибка подключения:", e)
         return []
 
     soup = BeautifulSoup(response.text, 'html.parser')
-    table = soup.find('table', {'id': 'calendar__table'})
+    
+    # ✅ ВАЖНО: ищем по class_, а не по id
+    table = soup.find('table', class_='calendar__table')
     if not table:
-        print("❌ Не найдена таблица на сайте.")
+        print("❌ Таблица не найдена (class='calendar__table')")
         return []
 
     rows = table.find_all('tr', class_='calendar__row')
@@ -76,7 +78,7 @@ async def fetch_all_forex_news_raw():
         event = event_cell.text.strip()
         currency = currency_cell.text.strip()
 
-        # Определяем цвет/важность
+        # Определяем уровень важности
         impact_span = impact_cell.find('span')
         if impact_span:
             classes = impact_span.get('class', [])
@@ -94,8 +96,9 @@ async def fetch_all_forex_news_raw():
         msg = f"{impact} — {event} ({currency})\n🕒 {time_text}"
         all_news.append(msg)
 
+    print(f"✅ Найдено новостей: {len(all_news)}")
     return all_news
 
 if __name__ == '__main__':
-    print("✅ Бот запущен. Готов показывать все новости с сайта.")
+    print("✅ Бот запущен. Таблица теперь видна и новости читаются.")
     executor.start_polling(dp, skip_updates=True)
